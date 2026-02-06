@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 7860;
 const isWin = os.platform() === 'win32';
 
 // yt-dlp Setup
@@ -20,32 +20,13 @@ const YTDLP_URL = isWin
 const YTDLP_PATH = path.join(os.tmpdir(), isWin ? 'yt-dlp.exe' : 'yt-dlp');
 
 async function ensureYtDlp() {
-    if (fs.existsSync(YTDLP_PATH)) {
-        return YTDLP_PATH;
-    }
-    console.log('Downloading yt-dlp...');
-    const response = await axios({
-        method: 'get',
-        url: YTDLP_URL,
-        responseType: 'stream'
-    });
-    const writer = fs.createWriteStream(YTDLP_PATH);
-    response.data.pipe(writer);
-    return new Promise((resolve, reject) => {
-        writer.on('finish', () => {
-            writer.close();
-            if (!isWin) fs.chmodSync(YTDLP_PATH, '755');
-            resolve(YTDLP_PATH);
-        });
-        writer.on('error', (err) => {
-            fs.unlink(YTDLP_PATH, () => reject(err));
-        });
-    });
+    // We now install it in the Dockerfile, so we just use the system path
+    return 'yt-dlp';
 }
 
 // Routes
 app.get('/', (req, res) => {
-    res.send('VTM Conversion Engine is Online 🚀');
+    res.send('Sonic Pulse Conversion Engine is Online 🚀');
 });
 
 app.post('/convertVideo', async (req, res) => {
@@ -59,17 +40,30 @@ app.post('/convertVideo', async (req, res) => {
         return res.status(400).json({ error: 'URL is required' });
     }
 
+    // Normalize shorthand URLs to full domains and strip tracking params
+    let normalizedUrl = url;
+    if (url.includes('youtu.be/')) {
+        const videoId = url.split('youtu.be/')[1].split('?')[0].split('&')[0];
+        normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    } else if (url.includes('youtube.com/watch')) {
+        const videoId = new URL(url).searchParams.get('v');
+        normalizedUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    }
+
     try {
         const ytDlpPath = await ensureYtDlp();
 
         // 1. Validation: Check duration
-        const durationCmd = `"${ytDlpPath}" --get-duration "${url}"`;
+        const durationCmd = `yt-dlp --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --get-duration "${normalizedUrl}"`;
         let durationStr = '';
         try {
             durationStr = execSync(durationCmd).toString().trim();
         } catch (e) {
-            console.error('Metadata error:', e.message);
-            return res.status(400).json({ error: 'Could not fetch video metadata. Check the URL.' });
+            console.error('Metadata error:', e.stderr?.toString() || e.message);
+            return res.status(400).json({
+                error: 'Could not fetch video metadata.',
+                details: e.stderr?.toString() || e.message
+            });
         }
 
         const parts = durationStr.split(':').map(Number);
@@ -103,7 +97,7 @@ app.post('/convertVideo', async (req, res) => {
         }
 
         // Conversion Command
-        const convertCmd = `"${ytDlpPath}" ${ffmpegLoc} -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata --newline --output "${outputTemplate}" --postprocessor-args "ffmpeg:-b:a 320k" "${url}"`;
+        const convertCmd = `yt-dlp --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" ${ffmpegLoc} -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --newline --output "${outputTemplate}" --postprocessor-args "ffmpeg:-b:a 320k" "${normalizedUrl}"`;
 
         await new Promise((resolve, reject) => {
             const process = exec(convertCmd);
