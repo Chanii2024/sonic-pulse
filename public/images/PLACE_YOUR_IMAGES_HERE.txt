@@ -1,0 +1,8 @@
+Place your background images here.
+Rename them to:
+img-1.jpg
+img-2.jpg
+...
+img-32.jpg
+
+The UI will automatically pick them up and display them in the background grid.
