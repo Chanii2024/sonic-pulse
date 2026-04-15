@@ -1,43 +1,25 @@
-# ⚡ SONICPULSE HYBRID: RUN GUIDE
+# SONIC PULSE: LOCAL RUN GUIDE
 
-### 🛠️ PREREQUISITES
-1. **Node.js**: Installed.
-2. **FFmpeg**: Installed locally (for Windows tests).
-3. **Internet**: Required for the backend to fetch YouTube data.
+## Prerequisites
+1. Node.js installed.
+2. FFmpeg installed locally (Windows tests).
+3. Internet connection for fetching YouTube data.
 
----
+## Boot Sequence (Dual Terminal)
 
-### 🔥 BOOT SEQUENCE (DUAL TERMINAL)
-
-**1. IGNITE ENGINE (BACKEND)**
-*Runs on port 10000*
-Open **Terminal A**:
+1. Start backend (`backend-render`, port `7860`):
 ```powershell
 cd backend-render
+npm install
 npm run dev
 ```
 
-**2. LIGHT UP FRONTEND (VISUALS)**
-*Runs on port 5173*
-Open **Terminal B**:
+2. Start frontend (root project, port `5173`):
 ```powershell
+npm install
 npm run dev
 ```
 
----
-
-### 🚀 DEPLOYMENT GUIDE (FREE TIER)
-
-**A. FRONTEND (Firebase Hosting)**
-```powershell
-npm run build
-firebase deploy --only hosting
-```
-
-**B. BACKEND (Render.com)**
-1. Push your code to GitHub.
-2. Create a new **Web Service** on Render.
-3. Select the `backend-render` folder as the **Root Directory**.
-4. Set Build Command: `npm install`
-5. Set Start Command: `node server.js`
-6. Render will automatically use the defined `Dockerfile`.
+## Notes
+- Frontend is configured for local backend only: `http://127.0.0.1:7860/convertVideo`.
+- No cloud hosting/deployment steps are included in this project setup.

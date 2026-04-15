@@ -20,7 +20,31 @@ const YTDLP_URL = isWin
 const YTDLP_PATH = path.join(os.tmpdir(), isWin ? 'yt-dlp.exe' : 'yt-dlp');
 
 async function ensureYtDlp() {
-    // We now install it in the Dockerfile, so we just use the system path
+    if (isWin) {
+        if (await fs.pathExists(YTDLP_PATH)) {
+            return YTDLP_PATH;
+        }
+
+        console.log('Downloading yt-dlp for local Windows use...');
+        const response = await axios({
+            method: 'get',
+            url: YTDLP_URL,
+            responseType: 'stream'
+        });
+
+        await fs.ensureDir(path.dirname(YTDLP_PATH));
+        const writer = fs.createWriteStream(YTDLP_PATH);
+        response.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+
+        return YTDLP_PATH;
+    }
+
+    // Non-Windows: prefer global binary.
     return 'yt-dlp';
 }
 
@@ -30,8 +54,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/convertVideo', async (req, res) => {
-    // In Firebase Callable, data is in req.body.data. In standard REST, it's usually req.body.
-    // We'll support both to be safe or if client sends plain JSON
+    // Support both plain REST body and wrapped `data` payload.
     const url = req.body.data ? req.body.data.url : req.body.url;
 
     console.log('Received request for:', url);
@@ -54,7 +77,7 @@ app.post('/convertVideo', async (req, res) => {
         const ytDlpPath = await ensureYtDlp();
 
         // 1. Validation: Check duration
-        const durationCmd = `yt-dlp --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --get-duration "${normalizedUrl}"`;
+        const durationCmd = `"${ytDlpPath}" --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" --get-duration "${normalizedUrl}"`;
         let durationStr = '';
         try {
             durationStr = execSync(durationCmd).toString().trim();
@@ -80,8 +103,7 @@ app.post('/convertVideo', async (req, res) => {
         await fs.ensureDir(tmpDir);
         const outputTemplate = path.join(tmpDir, '%(title)s.%(ext)s');
 
-        // Detect FFmpeg (On Render, it will be installed globally)
-        // Local Windows fallback
+        // Detect FFmpeg on local Windows fallback path.
         let ffmpegLoc = '';
         if (isWin) {
             const possiblePaths = [
@@ -97,7 +119,7 @@ app.post('/convertVideo', async (req, res) => {
         }
 
         // Conversion Command
-        const convertCmd = `yt-dlp --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" ${ffmpegLoc} -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --newline --output "${outputTemplate}" --postprocessor-args "ffmpeg:-b:a 320k" "${normalizedUrl}"`;
+        const convertCmd = `"${ytDlpPath}" --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" ${ffmpegLoc} -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --newline --output "${outputTemplate}" --postprocessor-args "ffmpeg:-b:a 320k" "${normalizedUrl}"`;
 
         await new Promise((resolve, reject) => {
             const process = exec(convertCmd);
@@ -122,9 +144,7 @@ app.post('/convertVideo', async (req, res) => {
 
         await fs.remove(tmpDir);
 
-        // Return same structure as Firebase Callable: { data: { ... } }
-        // But standard REST clients usually expect just the object.
-        // We will return standard JSON. Client adapter will handle it.
+        // Return standard JSON payload expected by local frontend.
         res.json({
             success: true,
             audioData: base64Audio,

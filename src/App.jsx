@@ -16,8 +16,6 @@ import {
   Eye,
   Minus
 } from 'lucide-react';
-import { functions } from './firebase';
-import { httpsCallable } from 'firebase/functions';
 import { useState, useEffect, useRef } from 'react';
 
 function App() {
@@ -150,14 +148,8 @@ function App() {
     setIsConvertingMinimized(false);
 
     try {
-      // --- MIGRATION: Switch to Render Backend ---
-      // const convertVideo = httpsCallable(functions, 'convertVideo', { timeout: 540000 });
-      // const result = await convertVideo({ url });
-
-      // Local Test URL (Run 'npm run dev' in backend-render folder)
-      const BACKEND_URL = 'http://localhost:10000/convertVideo';
-      // Production URL (After deploying to Render)
-      // const BACKEND_URL = 'https://your-render-app-name.onrender.com/convertVideo';
+      // Local-only backend endpoint.
+      const BACKEND_URL = 'http://127.0.0.1:7860/convertVideo';
 
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
@@ -167,7 +159,7 @@ function App() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Conversion failed on server');
+        throw new Error(errorData.details || errorData.error || 'Conversion failed on server');
       }
 
       const data = await response.json();
